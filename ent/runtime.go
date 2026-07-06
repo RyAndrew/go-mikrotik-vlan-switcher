@@ -5,6 +5,7 @@ package ent
 import (
 	"go-mikrotik-vlan-switcher/ent/appconfig"
 	"go-mikrotik-vlan-switcher/ent/interfacevlanstate"
+	"go-mikrotik-vlan-switcher/ent/requestcmd"
 	"go-mikrotik-vlan-switcher/ent/requestlog"
 	"go-mikrotik-vlan-switcher/ent/schema"
 	"time"
@@ -28,6 +29,12 @@ func init() {
 	interfacevlanstate.DefaultLastSyncedAt = interfacevlanstateDescLastSyncedAt.Default.(func() time.Time)
 	// interfacevlanstate.UpdateDefaultLastSyncedAt holds the default value on update for the last_synced_at field.
 	interfacevlanstate.UpdateDefaultLastSyncedAt = interfacevlanstateDescLastSyncedAt.UpdateDefault.(func() time.Time)
+	requestcmdFields := schema.RequestCmd{}.Fields()
+	_ = requestcmdFields
+	// requestcmdDescTimestamp is the schema descriptor for timestamp field.
+	requestcmdDescTimestamp := requestcmdFields[0].Descriptor()
+	// requestcmd.DefaultTimestamp holds the default value on creation for the timestamp field.
+	requestcmd.DefaultTimestamp = requestcmdDescTimestamp.Default.(func() time.Time)
 	requestlogFields := schema.RequestLog{}.Fields()
 	_ = requestlogFields
 	// requestlogDescTimestamp is the schema descriptor for timestamp field.

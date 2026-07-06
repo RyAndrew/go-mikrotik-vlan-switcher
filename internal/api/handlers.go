@@ -52,7 +52,7 @@ func (d *Deps) HandleSwitchVlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	previous, err := d.Mikrotik.SwitchVlan(req.Interface, req.VlanID)
+	previous, err := d.Mikrotik.SwitchVlan(r.Context(), req.Interface, req.VlanID)
 	if err != nil {
 		d.fail(w, r, http.StatusBadGateway, err.Error())
 		return
@@ -106,7 +106,7 @@ func (d *Deps) HandleGetVlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vlanID, err := d.Mikrotik.CurrentVlan(iface)
+	vlanID, err := d.Mikrotik.CurrentVlan(r.Context(), iface)
 	if err != nil {
 		d.fail(w, r, http.StatusBadGateway, err.Error())
 		return
@@ -137,7 +137,7 @@ func (d *Deps) HandleSyncVlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vlanID, err := d.Mikrotik.CurrentVlan(iface)
+	vlanID, err := d.Mikrotik.CurrentVlan(r.Context(), iface)
 	if err != nil {
 		d.fail(w, r, http.StatusBadGateway, err.Error())
 		return
@@ -184,7 +184,7 @@ func (d *Deps) HandleSyncAllVlans(w http.ResponseWriter, r *http.Request) {
 	results := make([]vlanStateItem, 0, len(ifaces))
 
 	for _, iface := range ifaces {
-		vlanID, err := d.Mikrotik.CurrentVlan(iface)
+		vlanID, err := d.Mikrotik.CurrentVlan(r.Context(), iface)
 		if err != nil {
 			results = append(results, vlanStateItem{Interface: iface, Error: err.Error()})
 			continue

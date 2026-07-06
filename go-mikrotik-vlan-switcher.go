@@ -75,7 +75,7 @@ func main() {
 		fatal(log, "could not load app config", err)
 	}
 
-	mikClient, err := mikrotik.Dial(cfg.MikrotikAddress, cfg.MikrotikUsername, cfg.MikrotikPassword)
+	mikClient, err := mikrotik.Dial(cfg.MikrotikAddress, cfg.MikrotikUsername, cfg.MikrotikPassword, entClient)
 	if err != nil {
 		fatal(log, "could not dial mikrotik", err)
 	}

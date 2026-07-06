@@ -1,13 +1,21 @@
 // Package mikrotik wraps the RouterOS API to move a physical interface
 // between the vlan1/vlan101/vlan102 interface-lists, which is how VLAN
-// membership is managed on the target device.
+// membership is managed on the target device. Every command it sends to
+// the device is recorded in the request_cmds table.
 package mikrotik
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-routeros/routeros/v3"
+
+	"go-mikrotik-vlan-switcher/ent"
+	"go-mikrotik-vlan-switcher/internal/store"
 )
 
 // allInterfaces is the ordered list of physical ports this service is
@@ -76,19 +84,49 @@ func ListForVlanID(vlanID int) (string, error) {
 type Client struct {
 	mu   sync.Mutex
 	conn *routeros.Client
+	ent  *ent.Client
 }
 
-// Dial opens a RouterOS API connection to the target device.
-func Dial(address, username, password string) (*Client, error) {
+// Dial opens a RouterOS API connection to the target device. entClient is
+// used to record every command sent to the device in the request_cmds
+// table.
+func Dial(address, username, password string, entClient *ent.Client) (*Client, error) {
 	conn, err := routeros.Dial(address, username, password)
 	if err != nil {
 		return nil, fmt.Errorf("dial mikrotik: %w", err)
 	}
-	return &Client{conn: conn}, nil
+	return &Client{conn: conn, ent: entClient}, nil
 }
 
 func (c *Client) Close() {
 	c.conn.Close()
+}
+
+// run sends one RouterOS command and records it in the request_cmds table.
+func (c *Client) run(ctx context.Context, iface, cmd string, args ...string) (*routeros.Reply, error) {
+	start := time.Now()
+	reply, err := c.conn.Run(append([]string{cmd}, args...)...)
+	duration := time.Since(start)
+
+	if c.ent != nil {
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		logErr := store.WriteRequestCmd(ctx, c.ent, store.RequestCmdEntry{
+			Command:    cmd,
+			Args:       strings.Join(args, " "),
+			Interface:  iface,
+			Success:    err == nil,
+			Error:      errMsg,
+			DurationMs: duration.Milliseconds(),
+		})
+		if logErr != nil {
+			slog.Default().Error("write request_cmd", slog.Any("error", logErr))
+		}
+	}
+
+	return reply, err
 }
 
 // membership describes an existing /interface/list/member row for one of
@@ -101,8 +139,8 @@ type membership struct {
 
 // currentMembership finds which (if any) of the managed VLAN lists iface
 // currently belongs to.
-func (c *Client) currentMembership(iface string) (*membership, error) {
-	reply, err := c.conn.Run("/interface/list/member/print", "?interface="+iface)
+func (c *Client) currentMembership(ctx context.Context, iface string) (*membership, error) {
+	reply, err := c.run(ctx, iface, "/interface/list/member/print", "?interface="+iface)
 	if err != nil {
 		return nil, fmt.Errorf("list member print: %w", err)
 	}
@@ -116,11 +154,35 @@ func (c *Client) currentMembership(iface string) (*membership, error) {
 	return nil, nil
 }
 
+// bridgeName is the single bridge these ports belong to.
+const bridgeName = "bridge"
+
+// setBridgePortPVID sets the pvid on iface's existing /interface/bridge/port
+// entry, which is the second half of applying a VLAN change (the interface
+// list membership controls VLAN filtering, but the port's pvid controls
+// how untagged traffic on it is classified). The bridge port entry is
+// expected to already exist; it is not created if missing.
+func (c *Client) setBridgePortPVID(ctx context.Context, iface string, vlanID int) error {
+	reply, err := c.run(ctx, iface, "/interface/bridge/port/print", "?interface="+iface, "?bridge="+bridgeName)
+	if err != nil {
+		return fmt.Errorf("bridge port print: %w", err)
+	}
+	if len(reply.Re) == 0 {
+		return fmt.Errorf("no /interface/bridge/port entry for interface %q on bridge %q", iface, bridgeName)
+	}
+
+	id := reply.Re[0].Map[".id"]
+	if _, err := c.run(ctx, iface, "/interface/bridge/port/set", "=.id="+id, fmt.Sprintf("=pvid=%d", vlanID)); err != nil {
+		return fmt.Errorf("bridge port set pvid: %w", err)
+	}
+	return nil
+}
+
 // SwitchVlan moves iface into the interface-list for targetVlanID, removing
-// it from whichever managed list it currently belongs to (if any). It
-// returns the VLAN id iface belonged to beforehand, or 0 if it wasn't a
-// member of any managed list.
-func (c *Client) SwitchVlan(iface string, targetVlanID int) (previousVlanID int, err error) {
+// it from whichever managed list it currently belongs to (if any), and sets
+// the matching pvid on its bridge port entry. It returns the VLAN id iface
+// belonged to beforehand, or 0 if it wasn't a member of any managed list.
+func (c *Client) SwitchVlan(ctx context.Context, iface string, targetVlanID int) (previousVlanID int, err error) {
 	if err := ValidateInterface(iface); err != nil {
 		return 0, err
 	}
@@ -132,24 +194,27 @@ func (c *Client) SwitchVlan(iface string, targetVlanID int) (previousVlanID int,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	current, err := c.currentMembership(iface)
+	current, err := c.currentMembership(ctx, iface)
 	if err != nil {
 		return 0, err
 	}
 
 	if current != nil {
 		previousVlanID = current.vlanID
-		if current.list == targetList {
-			// Already a member of the target list; nothing to do.
-			return previousVlanID, nil
+		if current.list != targetList {
+			if _, err := c.run(ctx, iface, "/interface/list/member/remove", "=.id="+current.id); err != nil {
+				return previousVlanID, fmt.Errorf("list member remove: %w", err)
+			}
+			if _, err := c.run(ctx, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
+				return previousVlanID, fmt.Errorf("list member add: %w", err)
+			}
 		}
-		if _, err := c.conn.Run("/interface/list/member/remove", "=.id="+current.id); err != nil {
-			return previousVlanID, fmt.Errorf("list member remove: %w", err)
-		}
+	} else if _, err := c.run(ctx, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
+		return previousVlanID, fmt.Errorf("list member add: %w", err)
 	}
 
-	if _, err := c.conn.Run("/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
-		return previousVlanID, fmt.Errorf("list member add: %w", err)
+	if err := c.setBridgePortPVID(ctx, iface, targetVlanID); err != nil {
+		return previousVlanID, err
 	}
 
 	return previousVlanID, nil
@@ -157,7 +222,7 @@ func (c *Client) SwitchVlan(iface string, targetVlanID int) (previousVlanID int,
 
 // CurrentVlan returns the VLAN id iface currently belongs to, or 0 if it's
 // not a member of any managed list.
-func (c *Client) CurrentVlan(iface string) (vlanID int, err error) {
+func (c *Client) CurrentVlan(ctx context.Context, iface string) (vlanID int, err error) {
 	if err := ValidateInterface(iface); err != nil {
 		return 0, err
 	}
@@ -165,7 +230,7 @@ func (c *Client) CurrentVlan(iface string) (vlanID int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	current, err := c.currentMembership(iface)
+	current, err := c.currentMembership(ctx, iface)
 	if err != nil {
 		return 0, err
 	}

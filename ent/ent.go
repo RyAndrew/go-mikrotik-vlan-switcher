@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go-mikrotik-vlan-switcher/ent/appconfig"
 	"go-mikrotik-vlan-switcher/ent/interfacevlanstate"
+	"go-mikrotik-vlan-switcher/ent/requestcmd"
 	"go-mikrotik-vlan-switcher/ent/requestlog"
 	"reflect"
 	"sync"
@@ -77,6 +78,7 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			appconfig.Table:          appconfig.ValidColumn,
 			interfacevlanstate.Table: interfacevlanstate.ValidColumn,
+			requestcmd.Table:         requestcmd.ValidColumn,
 			requestlog.Table:         requestlog.ValidColumn,
 		})
 	})

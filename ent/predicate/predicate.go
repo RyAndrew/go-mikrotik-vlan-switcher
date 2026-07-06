@@ -12,5 +12,8 @@ type AppConfig func(*sql.Selector)
 // InterfaceVlanState is the predicate function for interfacevlanstate builders.
 type InterfaceVlanState func(*sql.Selector)
 
+// RequestCmd is the predicate function for requestcmd builders.
+type RequestCmd func(*sql.Selector)
+
 // RequestLog is the predicate function for requestlog builders.
 type RequestLog func(*sql.Selector)

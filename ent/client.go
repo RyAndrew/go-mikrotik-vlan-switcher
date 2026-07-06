@@ -13,6 +13,7 @@ import (
 
 	"go-mikrotik-vlan-switcher/ent/appconfig"
 	"go-mikrotik-vlan-switcher/ent/interfacevlanstate"
+	"go-mikrotik-vlan-switcher/ent/requestcmd"
 	"go-mikrotik-vlan-switcher/ent/requestlog"
 
 	"entgo.io/ent"
@@ -29,6 +30,8 @@ type Client struct {
 	AppConfig *AppConfigClient
 	// InterfaceVlanState is the client for interacting with the InterfaceVlanState builders.
 	InterfaceVlanState *InterfaceVlanStateClient
+	// RequestCmd is the client for interacting with the RequestCmd builders.
+	RequestCmd *RequestCmdClient
 	// RequestLog is the client for interacting with the RequestLog builders.
 	RequestLog *RequestLogClient
 }
@@ -44,6 +47,7 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.AppConfig = NewAppConfigClient(c.config)
 	c.InterfaceVlanState = NewInterfaceVlanStateClient(c.config)
+	c.RequestCmd = NewRequestCmdClient(c.config)
 	c.RequestLog = NewRequestLogClient(c.config)
 }
 
@@ -139,6 +143,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:             cfg,
 		AppConfig:          NewAppConfigClient(cfg),
 		InterfaceVlanState: NewInterfaceVlanStateClient(cfg),
+		RequestCmd:         NewRequestCmdClient(cfg),
 		RequestLog:         NewRequestLogClient(cfg),
 	}, nil
 }
@@ -161,6 +166,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:             cfg,
 		AppConfig:          NewAppConfigClient(cfg),
 		InterfaceVlanState: NewInterfaceVlanStateClient(cfg),
+		RequestCmd:         NewRequestCmdClient(cfg),
 		RequestLog:         NewRequestLogClient(cfg),
 	}, nil
 }
@@ -192,6 +198,7 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	c.AppConfig.Use(hooks...)
 	c.InterfaceVlanState.Use(hooks...)
+	c.RequestCmd.Use(hooks...)
 	c.RequestLog.Use(hooks...)
 }
 
@@ -200,6 +207,7 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	c.AppConfig.Intercept(interceptors...)
 	c.InterfaceVlanState.Intercept(interceptors...)
+	c.RequestCmd.Intercept(interceptors...)
 	c.RequestLog.Intercept(interceptors...)
 }
 
@@ -210,6 +218,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.AppConfig.mutate(ctx, m)
 	case *InterfaceVlanStateMutation:
 		return c.InterfaceVlanState.mutate(ctx, m)
+	case *RequestCmdMutation:
+		return c.RequestCmd.mutate(ctx, m)
 	case *RequestLogMutation:
 		return c.RequestLog.mutate(ctx, m)
 	default:
@@ -483,6 +493,139 @@ func (c *InterfaceVlanStateClient) mutate(ctx context.Context, m *InterfaceVlanS
 	}
 }
 
+// RequestCmdClient is a client for the RequestCmd schema.
+type RequestCmdClient struct {
+	config
+}
+
+// NewRequestCmdClient returns a client for the RequestCmd from the given config.
+func NewRequestCmdClient(c config) *RequestCmdClient {
+	return &RequestCmdClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `requestcmd.Hooks(f(g(h())))`.
+func (c *RequestCmdClient) Use(hooks ...Hook) {
+	c.hooks.RequestCmd = append(c.hooks.RequestCmd, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `requestcmd.Intercept(f(g(h())))`.
+func (c *RequestCmdClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RequestCmd = append(c.inters.RequestCmd, interceptors...)
+}
+
+// Create returns a builder for creating a RequestCmd entity.
+func (c *RequestCmdClient) Create() *RequestCmdCreate {
+	mutation := newRequestCmdMutation(c.config, OpCreate)
+	return &RequestCmdCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RequestCmd entities.
+func (c *RequestCmdClient) CreateBulk(builders ...*RequestCmdCreate) *RequestCmdCreateBulk {
+	return &RequestCmdCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RequestCmdClient) MapCreateBulk(slice any, setFunc func(*RequestCmdCreate, int)) *RequestCmdCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RequestCmdCreateBulk{err: fmt.Errorf("calling to RequestCmdClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RequestCmdCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RequestCmdCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RequestCmd.
+func (c *RequestCmdClient) Update() *RequestCmdUpdate {
+	mutation := newRequestCmdMutation(c.config, OpUpdate)
+	return &RequestCmdUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RequestCmdClient) UpdateOne(_m *RequestCmd) *RequestCmdUpdateOne {
+	mutation := newRequestCmdMutation(c.config, OpUpdateOne, withRequestCmd(_m))
+	return &RequestCmdUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RequestCmdClient) UpdateOneID(id int) *RequestCmdUpdateOne {
+	mutation := newRequestCmdMutation(c.config, OpUpdateOne, withRequestCmdID(id))
+	return &RequestCmdUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RequestCmd.
+func (c *RequestCmdClient) Delete() *RequestCmdDelete {
+	mutation := newRequestCmdMutation(c.config, OpDelete)
+	return &RequestCmdDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RequestCmdClient) DeleteOne(_m *RequestCmd) *RequestCmdDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RequestCmdClient) DeleteOneID(id int) *RequestCmdDeleteOne {
+	builder := c.Delete().Where(requestcmd.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RequestCmdDeleteOne{builder}
+}
+
+// Query returns a query builder for RequestCmd.
+func (c *RequestCmdClient) Query() *RequestCmdQuery {
+	return &RequestCmdQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRequestCmd},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RequestCmd entity by its id.
+func (c *RequestCmdClient) Get(ctx context.Context, id int) (*RequestCmd, error) {
+	return c.Query().Where(requestcmd.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RequestCmdClient) GetX(ctx context.Context, id int) *RequestCmd {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *RequestCmdClient) Hooks() []Hook {
+	return c.hooks.RequestCmd
+}
+
+// Interceptors returns the client interceptors.
+func (c *RequestCmdClient) Interceptors() []Interceptor {
+	return c.inters.RequestCmd
+}
+
+func (c *RequestCmdClient) mutate(ctx context.Context, m *RequestCmdMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RequestCmdCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RequestCmdUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RequestCmdUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RequestCmdDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RequestCmd mutation op: %q", m.Op())
+	}
+}
+
 // RequestLogClient is a client for the RequestLog schema.
 type RequestLogClient struct {
 	config
@@ -619,9 +762,9 @@ func (c *RequestLogClient) mutate(ctx context.Context, m *RequestLogMutation) (V
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		AppConfig, InterfaceVlanState, RequestLog []ent.Hook
+		AppConfig, InterfaceVlanState, RequestCmd, RequestLog []ent.Hook
 	}
 	inters struct {
-		AppConfig, InterfaceVlanState, RequestLog []ent.Interceptor
+		AppConfig, InterfaceVlanState, RequestCmd, RequestLog []ent.Interceptor
 	}
 )

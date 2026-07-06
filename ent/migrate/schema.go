@@ -39,6 +39,23 @@ var (
 		Columns:    InterfaceVlanStatesColumns,
 		PrimaryKey: []*schema.Column{InterfaceVlanStatesColumns[0]},
 	}
+	// RequestCmdsColumns holds the columns for the "request_cmds" table.
+	RequestCmdsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "timestamp", Type: field.TypeTime},
+		{Name: "command", Type: field.TypeString},
+		{Name: "args", Type: field.TypeString, Nullable: true},
+		{Name: "interface", Type: field.TypeString, Nullable: true},
+		{Name: "success", Type: field.TypeBool},
+		{Name: "error", Type: field.TypeString, Nullable: true},
+		{Name: "duration_ms", Type: field.TypeInt64},
+	}
+	// RequestCmdsTable holds the schema information for the "request_cmds" table.
+	RequestCmdsTable = &schema.Table{
+		Name:       "request_cmds",
+		Columns:    RequestCmdsColumns,
+		PrimaryKey: []*schema.Column{RequestCmdsColumns[0]},
+	}
 	// RequestLogsColumns holds the columns for the "request_logs" table.
 	RequestLogsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -63,6 +80,7 @@ var (
 	Tables = []*schema.Table{
 		AppConfigsTable,
 		InterfaceVlanStatesTable,
+		RequestCmdsTable,
 		RequestLogsTable,
 	}
 )

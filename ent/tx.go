@@ -16,6 +16,8 @@ type Tx struct {
 	AppConfig *AppConfigClient
 	// InterfaceVlanState is the client for interacting with the InterfaceVlanState builders.
 	InterfaceVlanState *InterfaceVlanStateClient
+	// RequestCmd is the client for interacting with the RequestCmd builders.
+	RequestCmd *RequestCmdClient
 	// RequestLog is the client for interacting with the RequestLog builders.
 	RequestLog *RequestLogClient
 
@@ -151,6 +153,7 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.AppConfig = NewAppConfigClient(tx.config)
 	tx.InterfaceVlanState = NewInterfaceVlanStateClient(tx.config)
+	tx.RequestCmd = NewRequestCmdClient(tx.config)
 	tx.RequestLog = NewRequestLogClient(tx.config)
 }
 

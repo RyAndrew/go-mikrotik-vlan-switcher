@@ -9,6 +9,7 @@ import (
 	"go-mikrotik-vlan-switcher/ent/appconfig"
 	"go-mikrotik-vlan-switcher/ent/interfacevlanstate"
 	"go-mikrotik-vlan-switcher/ent/predicate"
+	"go-mikrotik-vlan-switcher/ent/requestcmd"
 	"go-mikrotik-vlan-switcher/ent/requestlog"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ const (
 	// Node types.
 	TypeAppConfig          = "AppConfig"
 	TypeInterfaceVlanState = "InterfaceVlanState"
+	TypeRequestCmd         = "RequestCmd"
 	TypeRequestLog         = "RequestLog"
 )
 
@@ -1203,6 +1205,752 @@ func (m *InterfaceVlanStateMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *InterfaceVlanStateMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown InterfaceVlanState edge %s", name)
+}
+
+// RequestCmdMutation represents an operation that mutates the RequestCmd nodes in the graph.
+type RequestCmdMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int
+	timestamp      *time.Time
+	command        *string
+	args           *string
+	_interface     *string
+	success        *bool
+	error          *string
+	duration_ms    *int64
+	addduration_ms *int64
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*RequestCmd, error)
+	predicates     []predicate.RequestCmd
+}
+
+var _ ent.Mutation = (*RequestCmdMutation)(nil)
+
+// requestcmdOption allows management of the mutation configuration using functional options.
+type requestcmdOption func(*RequestCmdMutation)
+
+// newRequestCmdMutation creates new mutation for the RequestCmd entity.
+func newRequestCmdMutation(c config, op Op, opts ...requestcmdOption) *RequestCmdMutation {
+	m := &RequestCmdMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeRequestCmd,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withRequestCmdID sets the ID field of the mutation.
+func withRequestCmdID(id int) requestcmdOption {
+	return func(m *RequestCmdMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *RequestCmd
+		)
+		m.oldValue = func(ctx context.Context) (*RequestCmd, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().RequestCmd.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withRequestCmd sets the old RequestCmd of the mutation.
+func withRequestCmd(node *RequestCmd) requestcmdOption {
+	return func(m *RequestCmdMutation) {
+		m.oldValue = func(context.Context) (*RequestCmd, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m RequestCmdMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m RequestCmdMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *RequestCmdMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *RequestCmdMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().RequestCmd.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTimestamp sets the "timestamp" field.
+func (m *RequestCmdMutation) SetTimestamp(t time.Time) {
+	m.timestamp = &t
+}
+
+// Timestamp returns the value of the "timestamp" field in the mutation.
+func (m *RequestCmdMutation) Timestamp() (r time.Time, exists bool) {
+	v := m.timestamp
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimestamp returns the old "timestamp" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldTimestamp(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimestamp is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimestamp requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimestamp: %w", err)
+	}
+	return oldValue.Timestamp, nil
+}
+
+// ResetTimestamp resets all changes to the "timestamp" field.
+func (m *RequestCmdMutation) ResetTimestamp() {
+	m.timestamp = nil
+}
+
+// SetCommand sets the "command" field.
+func (m *RequestCmdMutation) SetCommand(s string) {
+	m.command = &s
+}
+
+// Command returns the value of the "command" field in the mutation.
+func (m *RequestCmdMutation) Command() (r string, exists bool) {
+	v := m.command
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCommand returns the old "command" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldCommand(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCommand is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCommand requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCommand: %w", err)
+	}
+	return oldValue.Command, nil
+}
+
+// ResetCommand resets all changes to the "command" field.
+func (m *RequestCmdMutation) ResetCommand() {
+	m.command = nil
+}
+
+// SetArgs sets the "args" field.
+func (m *RequestCmdMutation) SetArgs(s string) {
+	m.args = &s
+}
+
+// Args returns the value of the "args" field in the mutation.
+func (m *RequestCmdMutation) Args() (r string, exists bool) {
+	v := m.args
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArgs returns the old "args" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldArgs(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArgs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArgs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArgs: %w", err)
+	}
+	return oldValue.Args, nil
+}
+
+// ClearArgs clears the value of the "args" field.
+func (m *RequestCmdMutation) ClearArgs() {
+	m.args = nil
+	m.clearedFields[requestcmd.FieldArgs] = struct{}{}
+}
+
+// ArgsCleared returns if the "args" field was cleared in this mutation.
+func (m *RequestCmdMutation) ArgsCleared() bool {
+	_, ok := m.clearedFields[requestcmd.FieldArgs]
+	return ok
+}
+
+// ResetArgs resets all changes to the "args" field.
+func (m *RequestCmdMutation) ResetArgs() {
+	m.args = nil
+	delete(m.clearedFields, requestcmd.FieldArgs)
+}
+
+// SetInterface sets the "interface" field.
+func (m *RequestCmdMutation) SetInterface(s string) {
+	m._interface = &s
+}
+
+// Interface returns the value of the "interface" field in the mutation.
+func (m *RequestCmdMutation) Interface() (r string, exists bool) {
+	v := m._interface
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInterface returns the old "interface" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldInterface(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInterface is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInterface requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInterface: %w", err)
+	}
+	return oldValue.Interface, nil
+}
+
+// ClearInterface clears the value of the "interface" field.
+func (m *RequestCmdMutation) ClearInterface() {
+	m._interface = nil
+	m.clearedFields[requestcmd.FieldInterface] = struct{}{}
+}
+
+// InterfaceCleared returns if the "interface" field was cleared in this mutation.
+func (m *RequestCmdMutation) InterfaceCleared() bool {
+	_, ok := m.clearedFields[requestcmd.FieldInterface]
+	return ok
+}
+
+// ResetInterface resets all changes to the "interface" field.
+func (m *RequestCmdMutation) ResetInterface() {
+	m._interface = nil
+	delete(m.clearedFields, requestcmd.FieldInterface)
+}
+
+// SetSuccess sets the "success" field.
+func (m *RequestCmdMutation) SetSuccess(b bool) {
+	m.success = &b
+}
+
+// Success returns the value of the "success" field in the mutation.
+func (m *RequestCmdMutation) Success() (r bool, exists bool) {
+	v := m.success
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSuccess returns the old "success" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldSuccess(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSuccess is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSuccess requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSuccess: %w", err)
+	}
+	return oldValue.Success, nil
+}
+
+// ResetSuccess resets all changes to the "success" field.
+func (m *RequestCmdMutation) ResetSuccess() {
+	m.success = nil
+}
+
+// SetError sets the "error" field.
+func (m *RequestCmdMutation) SetError(s string) {
+	m.error = &s
+}
+
+// Error returns the value of the "error" field in the mutation.
+func (m *RequestCmdMutation) Error() (r string, exists bool) {
+	v := m.error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldError returns the old "error" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldError: %w", err)
+	}
+	return oldValue.Error, nil
+}
+
+// ClearError clears the value of the "error" field.
+func (m *RequestCmdMutation) ClearError() {
+	m.error = nil
+	m.clearedFields[requestcmd.FieldError] = struct{}{}
+}
+
+// ErrorCleared returns if the "error" field was cleared in this mutation.
+func (m *RequestCmdMutation) ErrorCleared() bool {
+	_, ok := m.clearedFields[requestcmd.FieldError]
+	return ok
+}
+
+// ResetError resets all changes to the "error" field.
+func (m *RequestCmdMutation) ResetError() {
+	m.error = nil
+	delete(m.clearedFields, requestcmd.FieldError)
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (m *RequestCmdMutation) SetDurationMs(i int64) {
+	m.duration_ms = &i
+	m.addduration_ms = nil
+}
+
+// DurationMs returns the value of the "duration_ms" field in the mutation.
+func (m *RequestCmdMutation) DurationMs() (r int64, exists bool) {
+	v := m.duration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDurationMs returns the old "duration_ms" field's value of the RequestCmd entity.
+// If the RequestCmd object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *RequestCmdMutation) OldDurationMs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDurationMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDurationMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDurationMs: %w", err)
+	}
+	return oldValue.DurationMs, nil
+}
+
+// AddDurationMs adds i to the "duration_ms" field.
+func (m *RequestCmdMutation) AddDurationMs(i int64) {
+	if m.addduration_ms != nil {
+		*m.addduration_ms += i
+	} else {
+		m.addduration_ms = &i
+	}
+}
+
+// AddedDurationMs returns the value that was added to the "duration_ms" field in this mutation.
+func (m *RequestCmdMutation) AddedDurationMs() (r int64, exists bool) {
+	v := m.addduration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDurationMs resets all changes to the "duration_ms" field.
+func (m *RequestCmdMutation) ResetDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+}
+
+// Where appends a list predicates to the RequestCmdMutation builder.
+func (m *RequestCmdMutation) Where(ps ...predicate.RequestCmd) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the RequestCmdMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RequestCmdMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RequestCmd, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *RequestCmdMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RequestCmdMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (RequestCmd).
+func (m *RequestCmdMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *RequestCmdMutation) Fields() []string {
+	fields := make([]string, 0, 7)
+	if m.timestamp != nil {
+		fields = append(fields, requestcmd.FieldTimestamp)
+	}
+	if m.command != nil {
+		fields = append(fields, requestcmd.FieldCommand)
+	}
+	if m.args != nil {
+		fields = append(fields, requestcmd.FieldArgs)
+	}
+	if m._interface != nil {
+		fields = append(fields, requestcmd.FieldInterface)
+	}
+	if m.success != nil {
+		fields = append(fields, requestcmd.FieldSuccess)
+	}
+	if m.error != nil {
+		fields = append(fields, requestcmd.FieldError)
+	}
+	if m.duration_ms != nil {
+		fields = append(fields, requestcmd.FieldDurationMs)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *RequestCmdMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case requestcmd.FieldTimestamp:
+		return m.Timestamp()
+	case requestcmd.FieldCommand:
+		return m.Command()
+	case requestcmd.FieldArgs:
+		return m.Args()
+	case requestcmd.FieldInterface:
+		return m.Interface()
+	case requestcmd.FieldSuccess:
+		return m.Success()
+	case requestcmd.FieldError:
+		return m.Error()
+	case requestcmd.FieldDurationMs:
+		return m.DurationMs()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *RequestCmdMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case requestcmd.FieldTimestamp:
+		return m.OldTimestamp(ctx)
+	case requestcmd.FieldCommand:
+		return m.OldCommand(ctx)
+	case requestcmd.FieldArgs:
+		return m.OldArgs(ctx)
+	case requestcmd.FieldInterface:
+		return m.OldInterface(ctx)
+	case requestcmd.FieldSuccess:
+		return m.OldSuccess(ctx)
+	case requestcmd.FieldError:
+		return m.OldError(ctx)
+	case requestcmd.FieldDurationMs:
+		return m.OldDurationMs(ctx)
+	}
+	return nil, fmt.Errorf("unknown RequestCmd field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestCmdMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case requestcmd.FieldTimestamp:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimestamp(v)
+		return nil
+	case requestcmd.FieldCommand:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCommand(v)
+		return nil
+	case requestcmd.FieldArgs:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArgs(v)
+		return nil
+	case requestcmd.FieldInterface:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInterface(v)
+		return nil
+	case requestcmd.FieldSuccess:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSuccess(v)
+		return nil
+	case requestcmd.FieldError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetError(v)
+		return nil
+	case requestcmd.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDurationMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestCmd field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *RequestCmdMutation) AddedFields() []string {
+	var fields []string
+	if m.addduration_ms != nil {
+		fields = append(fields, requestcmd.FieldDurationMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *RequestCmdMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case requestcmd.FieldDurationMs:
+		return m.AddedDurationMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *RequestCmdMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case requestcmd.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDurationMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown RequestCmd numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *RequestCmdMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(requestcmd.FieldArgs) {
+		fields = append(fields, requestcmd.FieldArgs)
+	}
+	if m.FieldCleared(requestcmd.FieldInterface) {
+		fields = append(fields, requestcmd.FieldInterface)
+	}
+	if m.FieldCleared(requestcmd.FieldError) {
+		fields = append(fields, requestcmd.FieldError)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *RequestCmdMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *RequestCmdMutation) ClearField(name string) error {
+	switch name {
+	case requestcmd.FieldArgs:
+		m.ClearArgs()
+		return nil
+	case requestcmd.FieldInterface:
+		m.ClearInterface()
+		return nil
+	case requestcmd.FieldError:
+		m.ClearError()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestCmd nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *RequestCmdMutation) ResetField(name string) error {
+	switch name {
+	case requestcmd.FieldTimestamp:
+		m.ResetTimestamp()
+		return nil
+	case requestcmd.FieldCommand:
+		m.ResetCommand()
+		return nil
+	case requestcmd.FieldArgs:
+		m.ResetArgs()
+		return nil
+	case requestcmd.FieldInterface:
+		m.ResetInterface()
+		return nil
+	case requestcmd.FieldSuccess:
+		m.ResetSuccess()
+		return nil
+	case requestcmd.FieldError:
+		m.ResetError()
+		return nil
+	case requestcmd.FieldDurationMs:
+		m.ResetDurationMs()
+		return nil
+	}
+	return fmt.Errorf("unknown RequestCmd field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *RequestCmdMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *RequestCmdMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *RequestCmdMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *RequestCmdMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *RequestCmdMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *RequestCmdMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *RequestCmdMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown RequestCmd unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *RequestCmdMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown RequestCmd edge %s", name)
 }
 
 // RequestLogMutation represents an operation that mutates the RequestLog nodes in the graph.

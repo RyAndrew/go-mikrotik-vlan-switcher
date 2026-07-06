@@ -32,6 +32,18 @@ func (f InterfaceVlanStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InterfaceVlanStateMutation", m)
 }
 
+// The RequestCmdFunc type is an adapter to allow the use of ordinary
+// function as RequestCmd mutator.
+type RequestCmdFunc func(context.Context, *ent.RequestCmdMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f RequestCmdFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.RequestCmdMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RequestCmdMutation", m)
+}
+
 // The RequestLogFunc type is an adapter to allow the use of ordinary
 // function as RequestLog mutator.
 type RequestLogFunc func(context.Context, *ent.RequestLogMutation) (ent.Value, error)

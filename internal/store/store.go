@@ -174,3 +174,35 @@ func WriteRequestLog(ctx context.Context, client *ent.Client, e RequestLogEntry)
 	_, err := q.Save(ctx)
 	return err
 }
+
+// RequestCmdEntry is the set of fields recorded for a single RouterOS API
+// command sent to the MikroTik device.
+type RequestCmdEntry struct {
+	Command    string
+	Args       string
+	Interface  string
+	Success    bool
+	Error      string
+	DurationMs int64
+}
+
+// WriteRequestCmd persists one request_cmds row.
+func WriteRequestCmd(ctx context.Context, client *ent.Client, e RequestCmdEntry) error {
+	q := client.RequestCmd.Create().
+		SetCommand(e.Command).
+		SetSuccess(e.Success).
+		SetDurationMs(e.DurationMs)
+
+	if e.Args != "" {
+		q.SetArgs(e.Args)
+	}
+	if e.Interface != "" {
+		q.SetInterface(e.Interface)
+	}
+	if e.Error != "" {
+		q.SetError(e.Error)
+	}
+
+	_, err := q.Save(ctx)
+	return err
+}
