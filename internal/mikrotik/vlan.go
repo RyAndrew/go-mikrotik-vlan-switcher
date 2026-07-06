@@ -10,15 +10,33 @@ import (
 	"github.com/go-routeros/routeros/v3"
 )
 
+// allInterfaces is the ordered list of physical ports this service is
+// permitted to move between VLAN interface-lists.
+var allInterfaces = func() []string {
+	ifaces := []string{"ether1"}
+	for i := 1; i <= 8; i++ {
+		ifaces = append(ifaces, fmt.Sprintf("sfp-sfpplus%d", i))
+	}
+	return ifaces
+}()
+
 // AllowedInterfaces is the set of physical ports this service is permitted
 // to move between VLAN interface-lists.
 var AllowedInterfaces = func() map[string]bool {
-	m := map[string]bool{"ether1": true}
-	for i := 1; i <= 8; i++ {
-		m[fmt.Sprintf("sfp-sfpplus%d", i)] = true
+	m := make(map[string]bool, len(allInterfaces))
+	for _, i := range allInterfaces {
+		m[i] = true
 	}
 	return m
 }()
+
+// AllInterfaces returns the ordered list of allowed ports (ether1, then
+// sfp-sfpplus1..8).
+func AllInterfaces() []string {
+	out := make([]string, len(allInterfaces))
+	copy(out, allInterfaces)
+	return out
+}
 
 // listByVlanID maps the VLAN id a caller asks for to the RouterOS
 // interface-list name that represents it.
