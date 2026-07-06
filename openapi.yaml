@@ -1,0 +1,283 @@
+openapi: 3.0.3
+info:
+  title: MikroTik VLAN Switcher API
+  description: >
+    OAuth2-protected API that moves a single MikroTik interface between
+    interface-lists (vlan1, vlan101, vlan102) to change its VLAN membership.
+    Access tokens are validated against the configured Okta issuer/audience
+    and must carry the required scope (configured via the app_config
+    vlan_scope column) unless authentication has been disabled via
+    app_config.enable_authentication.
+  version: "1.0.0"
+
+servers:
+  - url: http://localhost:8080
+
+security:
+  - bearerAuth: []
+
+paths:
+  /vlan:
+    post:
+      summary: Switch VLAN membership for an interface
+      operationId: switchVlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwitchVlanRequest"
+      responses:
+        "200":
+          description: VLAN membership updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwitchVlanResponse"
+        "400":
+          description: Invalid interface, vlan_id, or request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Token is valid but missing the required scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: MikroTik device call failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vlan/{interface}:
+    get:
+      summary: Get the cached VLAN membership for an interface
+      operationId: getVlan
+      parameters:
+        - name: interface
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InterfaceName"
+      responses:
+        "200":
+          description: Current (cached, or freshly queried) VLAN membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VlanStateResponse"
+        "400":
+          description: Interface is not an allowed port
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Token is valid but missing the required scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Interface has no known VLAN membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: MikroTik device call failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vlan/sync:
+    post:
+      summary: Force a live re-query of every allowed port's VLAN membership and overwrite the cache
+      description: >
+        Iterates over every allowed port (ether1, sfp-sfpplus1..8),
+        force-refreshing each one exactly like POST /vlan/{interface}/sync
+        and overwriting its cache entry. A failure on one port (device
+        error, cache write error) is reported in that port's error field
+        rather than aborting the rest, so the response always covers all
+        ports.
+      operationId: syncAllVlans
+      responses:
+        "200":
+          description: Per-port refresh results, in ether1, sfp-sfpplus1..8 order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VlanStateItem"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Token is valid but missing the required scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vlan/{interface}/sync:
+    post:
+      summary: Force a live re-query of an interface's VLAN membership and overwrite the cache
+      description: >
+        Unlike GET /vlan/{interface}, this always queries the MikroTik
+        device and overwrites the cached state, even if a (possibly stale)
+        cache entry already exists. Use it to correct the cache after
+        out-of-band changes made directly on the device.
+      operationId: syncVlan
+      parameters:
+        - name: interface
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/InterfaceName"
+      responses:
+        "200":
+          description: Cache refreshed from the device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VlanStateResponse"
+        "400":
+          description: Interface is not an allowed port
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Token is valid but missing the required scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Interface has no known VLAN membership on the device (cache entry, if any, is cleared)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: MikroTik device call failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Okta-issued OAuth2 access token, validated against app_config.oauth_issuer/oauth_audience and required to carry app_config.vlan_scope.
+
+  schemas:
+    InterfaceName:
+      type: string
+      description: Physical port this service is allowed to move between VLAN lists.
+      enum:
+        - ether1
+        - sfp-sfpplus1
+        - sfp-sfpplus2
+        - sfp-sfpplus3
+        - sfp-sfpplus4
+        - sfp-sfpplus5
+        - sfp-sfpplus6
+        - sfp-sfpplus7
+        - sfp-sfpplus8
+
+    VlanId:
+      type: integer
+      description: Supported VLAN id, mapped to a RouterOS interface-list (1 -> vlan1, 101 -> vlan101, 102 -> vlan102).
+      enum: [1, 101, 102]
+
+    SwitchVlanRequest:
+      type: object
+      required: [interface, vlan_id]
+      properties:
+        interface:
+          $ref: "#/components/schemas/InterfaceName"
+        vlan_id:
+          $ref: "#/components/schemas/VlanId"
+
+    SwitchVlanResponse:
+      type: object
+      properties:
+        interface:
+          $ref: "#/components/schemas/InterfaceName"
+        previous_vlan_id:
+          type: integer
+          description: VLAN id the interface belonged to before this call, or 0 if it wasn't a member of any managed list.
+        vlan_id:
+          $ref: "#/components/schemas/VlanId"
+        status:
+          type: string
+          example: ok
+
+    VlanStateResponse:
+      type: object
+      properties:
+        interface:
+          $ref: "#/components/schemas/InterfaceName"
+        vlan_id:
+          $ref: "#/components/schemas/VlanId"
+        list:
+          type: string
+          example: vlan101
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    VlanStateItem:
+      type: object
+      description: Per-port result of a bulk sync. vlan_id/list/last_synced_at are omitted if the port had no known membership, error is omitted on success.
+      properties:
+        interface:
+          $ref: "#/components/schemas/InterfaceName"
+        vlan_id:
+          $ref: "#/components/schemas/VlanId"
+        list:
+          type: string
+          example: vlan101
+        last_synced_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
