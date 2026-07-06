@@ -127,6 +127,15 @@ func SetCachedVlanState(ctx context.Context, client *ent.Client, iface, list str
 	return err
 }
 
+// DeleteCachedVlanState removes any cached row for iface. It is a no-op if
+// nothing was cached.
+func DeleteCachedVlanState(ctx context.Context, client *ent.Client, iface string) error {
+	_, err := client.InterfaceVlanState.Delete().
+		Where(interfacevlanstate.InterfaceEQ(iface)).
+		Exec(ctx)
+	return err
+}
+
 // RequestLogEntry is the set of fields recorded for a single handled request.
 type RequestLogEntry struct {
 	Method     string
