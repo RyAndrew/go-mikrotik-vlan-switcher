@@ -51,6 +51,51 @@ func LoadAppConfig(ctx context.Context, client *ent.Client) (*ent.AppConfig, err
 	return cfg, nil
 }
 
+// AppConfigSeed is the full set of AppConfig column values used to
+// create-or-replace the singleton row.
+type AppConfigSeed struct {
+	MikrotikAddress      string
+	MikrotikUsername     string
+	MikrotikPassword     string
+	OauthIssuer          string
+	OauthAudience        string
+	VlanScope            string
+	EnableAuthentication bool
+}
+
+// SeedAppConfig creates the singleton AppConfig row if none exists, or
+// overwrites every column of the existing one otherwise. Since the table
+// is a singleton, this is the ORM-side equivalent of scripts/seed_config.sql.
+func SeedAppConfig(ctx context.Context, client *ent.Client, seed AppConfigSeed) error {
+	existing, err := client.AppConfig.Query().First(ctx)
+	if ent.IsNotFound(err) {
+		_, err = client.AppConfig.Create().
+			SetMikrotikAddress(seed.MikrotikAddress).
+			SetMikrotikUsername(seed.MikrotikUsername).
+			SetMikrotikPassword(seed.MikrotikPassword).
+			SetOauthIssuer(seed.OauthIssuer).
+			SetOauthAudience(seed.OauthAudience).
+			SetVlanScope(seed.VlanScope).
+			SetEnableAuthentication(seed.EnableAuthentication).
+			Save(ctx)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	_, err = existing.Update().
+		SetMikrotikAddress(seed.MikrotikAddress).
+		SetMikrotikUsername(seed.MikrotikUsername).
+		SetMikrotikPassword(seed.MikrotikPassword).
+		SetOauthIssuer(seed.OauthIssuer).
+		SetOauthAudience(seed.OauthAudience).
+		SetVlanScope(seed.VlanScope).
+		SetEnableAuthentication(seed.EnableAuthentication).
+		Save(ctx)
+	return err
+}
+
 // GetCachedVlanState returns the last known list/vlan-id for an interface,
 // or ent.IsNotFound(err) == true if nothing has been cached yet.
 func GetCachedVlanState(ctx context.Context, client *ent.Client, iface string) (*ent.InterfaceVlanState, error) {
