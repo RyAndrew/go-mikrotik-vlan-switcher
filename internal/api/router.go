@@ -27,6 +27,8 @@ func NewRouter(log *slog.Logger, entClient *ent.Client, mikClient *mikrotik.Clie
 	mux := http.NewServeMux()
 	mux.Handle("POST /vlan", requireScope(http.HandlerFunc(deps.HandleSwitchVlan)))
 	mux.Handle("GET /vlan/{interface}", requireScope(http.HandlerFunc(deps.HandleGetVlan)))
+	mux.Handle("POST /vlan/{interface}/sync", requireScope(http.HandlerFunc(deps.HandleSyncVlan)))
+	mux.Handle("POST /vlan/sync", requireScope(http.HandlerFunc(deps.HandleSyncAllVlans)))
 
 	return Logging(log, entClient)(mux)
 }

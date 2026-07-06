@@ -124,6 +124,94 @@ func (d *Deps) HandleGetVlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, vlanStateResponse{Interface: iface, VlanID: vlanID, List: list})
 }
 
+// HandleSyncVlan handles POST /vlan/{interface}/sync: always query the
+// device for iface's current VLAN membership and overwrite the cache with
+// it, regardless of what (if anything) was cached before. Use this to
+// correct the cache after out-of-band changes on the device.
+func (d *Deps) HandleSyncVlan(w http.ResponseWriter, r *http.Request) {
+	iface := r.PathValue("interface")
+	reqctx.From(r.Context()).Interface = iface
+
+	if err := mikrotik.ValidateInterface(iface); err != nil {
+		d.fail(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	vlanID, err := d.Mikrotik.CurrentVlan(iface)
+	if err != nil {
+		d.fail(w, r, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	if vlanID == 0 {
+		if err := store.DeleteCachedVlanState(r.Context(), d.Ent, iface); err != nil {
+			reqctx.From(r.Context()).Error = "cache delete failed: " + err.Error()
+		}
+		d.fail(w, r, http.StatusNotFound, "interface has no known vlan membership")
+		return
+	}
+
+	list, _ := mikrotik.ListForVlanID(vlanID)
+	if err := store.SetCachedVlanState(r.Context(), d.Ent, iface, list, vlanID); err != nil {
+		d.fail(w, r, http.StatusInternalServerError, "cache write failed: "+err.Error())
+		return
+	}
+
+	now := time.Now()
+	writeJSON(w, http.StatusOK, vlanStateResponse{
+		Interface:    iface,
+		VlanID:       vlanID,
+		List:         list,
+		LastSyncedAt: &now,
+	})
+}
+
+type vlanStateItem struct {
+	Interface    string     `json:"interface"`
+	VlanID       int        `json:"vlan_id,omitempty"`
+	List         string     `json:"list,omitempty"`
+	LastSyncedAt *time.Time `json:"last_synced_at,omitempty"`
+	Error        string     `json:"error,omitempty"`
+}
+
+// HandleSyncAllVlans handles POST /vlan/sync: force a live re-query of
+// every allowed port's VLAN membership, overwrite the cache for each, and
+// return the full list. A failure on one port (device error, cache write
+// error) is reported in that port's Error field rather than aborting the
+// rest.
+func (d *Deps) HandleSyncAllVlans(w http.ResponseWriter, r *http.Request) {
+	ifaces := mikrotik.AllInterfaces()
+	results := make([]vlanStateItem, 0, len(ifaces))
+
+	for _, iface := range ifaces {
+		vlanID, err := d.Mikrotik.CurrentVlan(iface)
+		if err != nil {
+			results = append(results, vlanStateItem{Interface: iface, Error: err.Error()})
+			continue
+		}
+
+		if vlanID == 0 {
+			if err := store.DeleteCachedVlanState(r.Context(), d.Ent, iface); err != nil {
+				results = append(results, vlanStateItem{Interface: iface, Error: "cache delete failed: " + err.Error()})
+				continue
+			}
+			results = append(results, vlanStateItem{Interface: iface})
+			continue
+		}
+
+		list, _ := mikrotik.ListForVlanID(vlanID)
+		if err := store.SetCachedVlanState(r.Context(), d.Ent, iface, list, vlanID); err != nil {
+			results = append(results, vlanStateItem{Interface: iface, VlanID: vlanID, List: list, Error: "cache write failed: " + err.Error()})
+			continue
+		}
+
+		now := time.Now()
+		results = append(results, vlanStateItem{Interface: iface, VlanID: vlanID, List: list, LastSyncedAt: &now})
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
 func (d *Deps) fail(w http.ResponseWriter, r *http.Request, status int, msg string) {
 	reqctx.From(r.Context()).Error = msg
 	writeJSON(w, status, map[string]string{"error": msg})
