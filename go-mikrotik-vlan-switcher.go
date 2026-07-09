@@ -16,7 +16,7 @@ import (
 var (
 	debug      = flag.Bool("debug", false, "debug log level mode")
 	listenAddr = flag.String("listen-addr", ":8080", "HTTP listen address")
-	dbFile     = flag.String("db-file", "vlan-switcher.db", "sqlite file name, resolved relative to the current directory")
+	dbFile     = flag.String("db-file", "/data/vlan-switcher.db", "sqlite file name, resolved relative to the current directory")
 
 	seedConfig               = flag.Bool("seed-config", false, "create or replace the singleton app_config row from the seed-* flags below, then exit without starting the server")
 	seedMikrotikAddress      = flag.String("seed-mikrotik-address", "", "seed: mikrotik_address")
