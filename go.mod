@@ -1,4 +1,4 @@
-module go-mikrotik-vlan-switcher
+module github.com/RyAndrew/go-mikrotik-vlan-switcher
 
 go 1.26.4
 
