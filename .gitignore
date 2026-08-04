@@ -1,0 +1,4 @@
+data/vlan-switcher.db
+data/vlan-switcher.db-shm
+data/vlan-switcher.db-wal
+go-mikrotik-vlan-switcher.exe
