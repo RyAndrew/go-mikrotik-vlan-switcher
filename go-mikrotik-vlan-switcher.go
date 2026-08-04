@@ -75,11 +75,11 @@ func main() {
 		fatal(log, "could not load app config", err)
 	}
 
-	mikClient, err := mikrotik.Dial(cfg.MikrotikAddress, cfg.MikrotikUsername, cfg.MikrotikPassword, entClient)
-	if err != nil {
-		fatal(log, "could not dial mikrotik", err)
+	mikClient := mikrotik.NewClient(cfg.MikrotikAddress, cfg.MikrotikUsername, cfg.MikrotikPassword, entClient)
+	if err := mikClient.TestConnection(); err != nil {
+		fatal(log, "could not reach mikrotik", err)
 	}
-	defer mikClient.Close()
+	log.Info("mikrotik connection test succeeded")
 
 	verifier := auth.NewVerifier(cfg.OauthIssuer, cfg.OauthAudience)
 
