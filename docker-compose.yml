@@ -1,5 +1,6 @@
 services:
-  app:
+  mikrotik-vlan-switcher:
+    container_name: mikrotik-vlan-switcher
     build: .
     ports:
       - "7071:7071"
