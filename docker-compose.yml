@@ -2,6 +2,15 @@ services:
   app:
     build: .
     ports:
-      - "8080:8080"
+      - "7071:7071"
+    environment:
+      - DATA_PATH=/data
+      - LISTEN_ADDR=:7071
+      - ENABLE_UI=true
+      # - DEBUG=true
     volumes:
+      # Persists the sqlite database and ui.html under DATA_PATH. Note this
+      # bind mount replaces the image's baked-in ./data entirely, so copy
+      # ui.html into ./data on the host before first run (or copy it out of
+      # the image once: docker compose run --rm app cat /data/ui.html > data/ui.html).
       - ./data:/data

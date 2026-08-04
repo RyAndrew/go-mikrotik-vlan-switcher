@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 
 	"go-mikrotik-vlan-switcher/internal/api"
 	"go-mikrotik-vlan-switcher/internal/auth"
@@ -13,19 +14,40 @@ import (
 	"go-mikrotik-vlan-switcher/internal/store"
 )
 
-var (
-	debug      = flag.Bool("debug", false, "debug log level mode")
-	listenAddr = flag.String("listen-addr", ":8080", "HTTP listen address")
-	dbFile     = flag.String("db-file", "/data/vlan-switcher.db", "sqlite file name, resolved relative to the current directory")
+func getEnv(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return fallback
+}
 
-	seedConfig               = flag.Bool("seed-config", false, "create or replace the singleton app_config row from the seed-* flags below, then exit without starting the server")
-	seedMikrotikAddress      = flag.String("seed-mikrotik-address", "", "seed: mikrotik_address")
-	seedMikrotikUsername     = flag.String("seed-mikrotik-username", "", "seed: mikrotik_username")
-	seedMikrotikPassword     = flag.String("seed-mikrotik-password", "", "seed: mikrotik_password")
-	seedOauthIssuer          = flag.String("seed-oauth-issuer", "", "seed: oauth_issuer")
-	seedOauthAudience        = flag.String("seed-oauth-audience", "", "seed: oauth_audience")
-	seedVlanScope            = flag.String("seed-vlan-scope", "", "seed: vlan_scope")
-	seedEnableAuthentication = flag.Bool("seed-enable-authentication", true, "seed: enable_authentication")
+func getEnvBool(key string, fallback bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fallback
+	}
+	return b
+}
+
+var (
+	debug      = getEnvBool("DEBUG", false)
+	listenAddr = getEnv("LISTEN_ADDR", ":7071")
+	// dataPath is a directory holding both the sqlite database file and ui.html.
+	dataPath = getEnv("DATA_PATH", "data")
+	enableUI = getEnvBool("ENABLE_UI", false)
+
+	seedConfig               = getEnvBool("SEED_CONFIG", false)
+	seedMikrotikAddress      = getEnv("SEED_MIKROTIK_ADDRESS", "")
+	seedMikrotikUsername     = getEnv("SEED_MIKROTIK_USERNAME", "")
+	seedMikrotikPassword     = getEnv("SEED_MIKROTIK_PASSWORD", "")
+	seedOauthIssuer          = getEnv("SEED_OAUTH_ISSUER", "")
+	seedOauthAudience        = getEnv("SEED_OAUTH_AUDIENCE", "")
+	seedVlanScope            = getEnv("SEED_VLAN_SCOPE", "")
+	seedEnableAuthentication = getEnvBool("SEED_ENABLE_AUTHENTICATION", true)
 )
 
 func fatal(log *slog.Logger, message string, err error) {
@@ -34,10 +56,8 @@ func fatal(log *slog.Logger, message string, err error) {
 }
 
 func main() {
-	flag.Parse()
-
 	logLevel := slog.LevelInfo
-	if *debug {
+	if debug {
 		logLevel = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -47,21 +67,24 @@ func main() {
 
 	ctx := context.Background()
 
-	entClient, err := store.Open(ctx, *dbFile)
+	dbFile := filepath.Join(dataPath, "vlan-switcher.db")
+	uiHTMLPath := filepath.Join(dataPath, "ui.html")
+
+	entClient, err := store.Open(ctx, dbFile)
 	if err != nil {
 		fatal(log, "could not open database", err)
 	}
 	defer entClient.Close()
 
-	if *seedConfig {
+	if seedConfig {
 		err := store.SeedAppConfig(ctx, entClient, store.AppConfigSeed{
-			MikrotikAddress:      *seedMikrotikAddress,
-			MikrotikUsername:     *seedMikrotikUsername,
-			MikrotikPassword:     *seedMikrotikPassword,
-			OauthIssuer:          *seedOauthIssuer,
-			OauthAudience:        *seedOauthAudience,
-			VlanScope:            *seedVlanScope,
-			EnableAuthentication: *seedEnableAuthentication,
+			MikrotikAddress:      seedMikrotikAddress,
+			MikrotikUsername:     seedMikrotikUsername,
+			MikrotikPassword:     seedMikrotikPassword,
+			OauthIssuer:          seedOauthIssuer,
+			OauthAudience:        seedOauthAudience,
+			VlanScope:            seedVlanScope,
+			EnableAuthentication: seedEnableAuthentication,
 		})
 		if err != nil {
 			fatal(log, "could not seed app config", err)
@@ -83,10 +106,10 @@ func main() {
 
 	verifier := auth.NewVerifier(cfg.OauthIssuer, cfg.OauthAudience)
 
-	handler := api.NewRouter(log, entClient, mikClient, verifier, cfg.VlanScope, cfg.EnableAuthentication)
+	handler := api.NewRouter(log, entClient, mikClient, verifier, cfg.VlanScope, cfg.EnableAuthentication, uiHTMLPath, enableUI)
 
-	log.Info("listening", slog.String("address", *listenAddr))
-	if err := http.ListenAndServe(*listenAddr, handler); err != nil {
+	log.Info("listening", slog.String("address", listenAddr))
+	if err := http.ListenAndServe(listenAddr, handler); err != nil {
 		fatal(log, "server stopped", err)
 	}
 }
