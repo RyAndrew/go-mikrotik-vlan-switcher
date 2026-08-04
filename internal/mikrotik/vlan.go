@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-routeros/routeros/v3"
@@ -80,32 +79,48 @@ func ListForVlanID(vlanID int) (string, error) {
 	return list, nil
 }
 
-// Client is a serialized wrapper around a single RouterOS API connection.
+// Client holds the RouterOS connection parameters for the target device.
+// It does not keep a connection open: every operation dials a fresh
+// connection, uses it, and closes it before returning.
 type Client struct {
-	mu   sync.Mutex
-	conn *routeros.Client
-	ent  *ent.Client
+	address  string
+	username string
+	password string
+	ent      *ent.Client
 }
 
-// Dial opens a RouterOS API connection to the target device. entClient is
-// used to record every command sent to the device in the request_cmds
-// table.
-func Dial(address, username, password string, entClient *ent.Client) (*Client, error) {
-	conn, err := routeros.Dial(address, username, password)
+// NewClient builds a Client for the target device. entClient is used to
+// record every command sent to the device in the request_cmds table.
+func NewClient(address, username, password string, entClient *ent.Client) *Client {
+	return &Client{address: address, username: username, password: password, ent: entClient}
+}
+
+// dial opens a new RouterOS API connection to the target device. Callers
+// are responsible for closing it once they're done.
+func (c *Client) dial() (*routeros.Client, error) {
+	conn, err := routeros.Dial(c.address, c.username, c.password)
 	if err != nil {
 		return nil, fmt.Errorf("dial mikrotik: %w", err)
 	}
-	return &Client{conn: conn, ent: entClient}, nil
+	return conn, nil
 }
 
-func (c *Client) Close() {
-	c.conn.Close()
+// TestConnection opens a connection to the device and immediately closes
+// it, to verify the device is reachable and the credentials are valid.
+func (c *Client) TestConnection() error {
+	conn, err := c.dial()
+	if err != nil {
+		return err
+	}
+	conn.Close()
+	return nil
 }
 
-// run sends one RouterOS command and records it in the request_cmds table.
-func (c *Client) run(ctx context.Context, iface, cmd string, args ...string) (*routeros.Reply, error) {
+// run sends one RouterOS command over conn and records it in the
+// request_cmds table.
+func (c *Client) run(ctx context.Context, conn *routeros.Client, iface, cmd string, args ...string) (*routeros.Reply, error) {
 	start := time.Now()
-	reply, err := c.conn.Run(append([]string{cmd}, args...)...)
+	reply, err := conn.Run(append([]string{cmd}, args...)...)
 	duration := time.Since(start)
 
 	if c.ent != nil {
@@ -139,8 +154,8 @@ type membership struct {
 
 // currentMembership finds which (if any) of the managed VLAN lists iface
 // currently belongs to.
-func (c *Client) currentMembership(ctx context.Context, iface string) (*membership, error) {
-	reply, err := c.run(ctx, iface, "/interface/list/member/print", "?interface="+iface)
+func (c *Client) currentMembership(ctx context.Context, conn *routeros.Client, iface string) (*membership, error) {
+	reply, err := c.run(ctx, conn, iface, "/interface/list/member/print", "?interface="+iface)
 	if err != nil {
 		return nil, fmt.Errorf("list member print: %w", err)
 	}
@@ -162,8 +177,8 @@ const bridgeName = "bridge"
 // list membership controls VLAN filtering, but the port's pvid controls
 // how untagged traffic on it is classified). The bridge port entry is
 // expected to already exist; it is not created if missing.
-func (c *Client) setBridgePortPVID(ctx context.Context, iface string, vlanID int) error {
-	reply, err := c.run(ctx, iface, "/interface/bridge/port/print", "?interface="+iface, "?bridge="+bridgeName)
+func (c *Client) setBridgePortPVID(ctx context.Context, conn *routeros.Client, iface string, vlanID int) error {
+	reply, err := c.run(ctx, conn, iface, "/interface/bridge/port/print", "?interface="+iface, "?bridge="+bridgeName)
 	if err != nil {
 		return fmt.Errorf("bridge port print: %w", err)
 	}
@@ -172,7 +187,7 @@ func (c *Client) setBridgePortPVID(ctx context.Context, iface string, vlanID int
 	}
 
 	id := reply.Re[0].Map[".id"]
-	if _, err := c.run(ctx, iface, "/interface/bridge/port/set", "=.id="+id, fmt.Sprintf("=pvid=%d", vlanID)); err != nil {
+	if _, err := c.run(ctx, conn, iface, "/interface/bridge/port/set", "=.id="+id, fmt.Sprintf("=pvid=%d", vlanID)); err != nil {
 		return fmt.Errorf("bridge port set pvid: %w", err)
 	}
 	return nil
@@ -191,10 +206,13 @@ func (c *Client) SwitchVlan(ctx context.Context, iface string, targetVlanID int)
 		return 0, err
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	conn, err := c.dial()
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
 
-	current, err := c.currentMembership(ctx, iface)
+	current, err := c.currentMembership(ctx, conn, iface)
 	if err != nil {
 		return 0, err
 	}
@@ -202,18 +220,18 @@ func (c *Client) SwitchVlan(ctx context.Context, iface string, targetVlanID int)
 	if current != nil {
 		previousVlanID = current.vlanID
 		if current.list != targetList {
-			if _, err := c.run(ctx, iface, "/interface/list/member/remove", "=.id="+current.id); err != nil {
+			if _, err := c.run(ctx, conn, iface, "/interface/list/member/remove", "=.id="+current.id); err != nil {
 				return previousVlanID, fmt.Errorf("list member remove: %w", err)
 			}
-			if _, err := c.run(ctx, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
+			if _, err := c.run(ctx, conn, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
 				return previousVlanID, fmt.Errorf("list member add: %w", err)
 			}
 		}
-	} else if _, err := c.run(ctx, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
+	} else if _, err := c.run(ctx, conn, iface, "/interface/list/member/add", "=list="+targetList, "=interface="+iface); err != nil {
 		return previousVlanID, fmt.Errorf("list member add: %w", err)
 	}
 
-	if err := c.setBridgePortPVID(ctx, iface, targetVlanID); err != nil {
+	if err := c.setBridgePortPVID(ctx, conn, iface, targetVlanID); err != nil {
 		return previousVlanID, err
 	}
 
@@ -227,10 +245,13 @@ func (c *Client) CurrentVlan(ctx context.Context, iface string) (vlanID int, err
 		return 0, err
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	conn, err := c.dial()
+	if err != nil {
+		return 0, err
+	}
+	defer conn.Close()
 
-	current, err := c.currentMembership(ctx, iface)
+	current, err := c.currentMembership(ctx, conn, iface)
 	if err != nil {
 		return 0, err
 	}
