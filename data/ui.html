@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MikroTik CRS309 VLAN Manager</title>
+
+    <script src="{{CDN Host}}/ext-7.0.0-gpl/build/ext-all.js" integrity="sha384-njhwPQNfBwYXk4yob3ba+1Z12Gq9kOmvrpIy+ikknJYGHYIQ4q+B5LWoc6Hylv2D" crossorigin="anonymous"></script>
+    <script src="{{CDN Host}}/ext-7.0.0-gpl/build/classic/theme-classic/theme-classic.js" integrity="sha384-Nq4K7p2NlXhWFFsQX9RL10fWMF6yVfLT16N65UkbdjgsQvtlTplFH5Lg3z3d2D5X" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="{{CDN Host}}/ext-7.0.0-gpl/build/classic/theme-classic/resources/theme-classic-all_1.css" integrity="sha384-6lR+ONG5amGti/6I8LhfN/zYYZomorzwVmpewcmWfABuT6PZCYbcvYlZy+6jZ9Xu" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="{{CDN Host}}/ext-7.0.0-gpl/build/classic/theme-classic/resources/theme-classic-all_2.css" integrity="sha384-Kp3mMBoa1K0cuH9BRDWjkz138qCVZH/ACoiUoLy6+AdZ+CLHXaJoVGkbpzLyxnUJ" crossorigin="anonymous"></script>
+   
+<style type="text/css">
+    .app-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #3a3a3a;
+        background: #1a1a1a;
+    }
+    .app-title {
+        color: #e0e0e0;
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+    }
+    .status-loading {
+        color: #ffa500;
+    }
+    .status-error {
+        color: #ff4444;
+    }
+    .status-ok {
+        color: #4caf50;
+    }
+</style>
+    <script type="text/javascript">
+
+Ext.define('VlanManager.view.SettingsWindowViewController', {
+    extend: 'Ext.app.ViewController',
+    alias: 'controller.settings',
+
+    init: function() {
+        var vm = this.getViewModel();
+        vm.set('authType', localStorage.getItem('authType') || 'none');
+        vm.set('bearerToken', localStorage.getItem('bearerToken') || '');
+    },
+
+    onSaveClick: function() {
+        var vm = this.getViewModel();
+        localStorage.setItem('authType', vm.get('authType'));
+        localStorage.setItem('bearerToken', vm.get('bearerToken'));
+        this.getView().close();
+    },
+
+    onCancelClick: function() {
+        this.getView().close();
+    }
+});
+
+Ext.define('VlanManager.view.SettingsWindowViewModel', {
+    extend: 'Ext.app.ViewModel',
+    alias: 'viewmodel.settings',
+
+    data: {
+        authType: 'none',
+        bearerToken: ''
+    },
+
+    formulas: {
+        isNotBearer: function(get) {
+            return get('authType') !== 'bearer';
+        }
+    }
+});
+
+Ext.define('VlanManager.view.SettingsWindow', {
+    extend: 'Ext.window.Window',
+    alias: 'widget.settingswindow',
+
+    requires: [
+        'VlanManager.view.SettingsWindowViewModel',
+        'VlanManager.view.SettingsWindowViewController'
+    ],
+
+    viewModel: { type: 'settings' },
+    controller: 'settings',
+
+    title: 'Settings',
+    modal: true,
+    width: 300,
+    layout: 'form',
+    bodyPadding: 10,
+
+    items: [
+        {
+            xtype: 'combobox',
+            fieldLabel: 'Auth Type',
+            editable: false,
+            queryMode: 'local',
+            valueField: 'value',
+            displayField: 'text',
+            store: {
+                fields: ['value', 'text'],
+                data: [
+                    { value: 'none', text: 'None' },
+                    { value: 'bearer', text: 'Bearer' }
+                ]
+            },
+            bind: { value: '{authType}' }
+        },
+        {
+            xtype: 'textfield',
+            fieldLabel: 'Bearer Token',
+            inputType: 'password',
+            bind: {
+                value: '{bearerToken}',
+                hidden: '{isNotBearer}'
+            }
+        }
+    ],
+
+    buttons: [
+        { text: 'Save', handler: 'onSaveClick' },
+        { text: 'Cancel', handler: 'onCancelClick' }
+    ]
+});
+
+Ext.define('VlanManager.view.MainViewModel', {
+    extend: 'Ext.app.ViewModel',
+    alias: 'viewmodel.main',
+
+    data: {
+        apiUrl: ''
+    },
+
+    stores: {
+        portStore: {
+            fields: [
+                { name: 'interface', type: 'string' },
+                { name: 'vlan_id', type: 'int' }
+            ],
+            data: []
+        }
+    }
+});
+
+Ext.define('VlanManager.view.MainViewController', {
+    extend: 'Ext.app.ViewController',
+    alias: 'controller.main',
+
+    requires: [
+        'VlanManager.view.SettingsWindow'
+    ],
+
+    init: function() {
+        this.onRefreshClick();
+    },
+
+    onSettingsClick: function() {
+        Ext.create('VlanManager.view.SettingsWindow').show();
+    },
+
+    onRefreshClick: function() {
+        var vm = this.getViewModel();
+
+        let toast = Ext.toast({ html: 'Syncing...', align: 't'});
+
+        Ext.Ajax.request({
+            url: vm.get('apiUrl') + '/vlan/sync',
+            method: 'POST',
+            headers: this.getAuthHeader(),
+            scope: this,
+            success: function(response) {
+                vm.getStore('portStore').loadData(Ext.decode(response.responseText));
+                toast.hide();
+            },
+            failure: function(response) {
+                Ext.toast({ html: this.parseError(response, 'Sync failed'), align: 't' });
+            }
+        });
+    },
+
+    onVlanEdit: function(editor, e) {
+        if (e.originalValue === e.value) {
+            return;
+        }
+
+        var vm = this.getViewModel(),
+            interfaceName = e.record.get('interface'),
+            vlanId = e.value;
+
+        Ext.Ajax.request({
+            url: vm.get('apiUrl') + '/vlan',
+            method: 'POST',
+            headers: this.getAuthHeader(),
+            jsonData: { interface: interfaceName, vlan_id: vlanId },
+            scope: this,
+            success: function(response) {
+                Ext.toast({ html: 'Updated ' + interfaceName + ' to VLAN ' + vlanId, align: 't' });
+            },
+            failure: function(response) {
+                Ext.toast({ html: this.parseError(response, 'Failed to update ' + interfaceName), align: 't' });
+            }
+        });
+    },
+
+    getAuthHeader: function() {
+        var authType = localStorage.getItem('authType') || 'none',
+            token = localStorage.getItem('bearerToken');
+
+        return (authType === 'bearer' && token) ? { 'Authorization': 'Bearer ' + token } : {};
+    },
+
+    parseError: function(response, fallback) {
+        try {
+            return Ext.decode(response.responseText).error || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+});
+
+Ext.define('VlanManager.view.Main', {
+    extend: 'Ext.container.Viewport',
+    alias: 'widget.main',
+
+    requires: [
+        'VlanManager.view.MainViewModel',
+        'VlanManager.view.MainViewController'
+    ],
+
+    viewModel: { type: 'main' },
+    controller: 'main',
+
+    layout: 'border',
+    items: [
+        {
+            region: 'north',
+            border: false,
+            html: '<div class="app-header"><p class="app-title">MikroTik CRS309 VLAN Manager</p></div>'
+        },
+        {
+            xtype: 'grid',
+            region: 'center',
+            border: false,
+            frame: true,
+            bind: { store: '{portStore}' },
+            tbar: {
+                defaultButtonUI: 'default',
+                items:[
+                    { xtype: 'button', text: 'Refresh', handler: 'onRefreshClick' },
+                    '->',
+                    { xtype: 'button', text: '⚙ Settings', handler: 'onSettingsClick' }
+                ],
+            },
+            columns: [
+                { text: 'Port', dataIndex: 'interface', width: 100, editor: false },
+                {
+                    text: 'VLAN',
+                    dataIndex: 'vlan_id',
+                    flex: 1,
+                    renderer: function(value) {
+                        return value || '-';
+                    },
+                    editor: {
+                        xtype: 'combobox',
+                        editable: false,
+                        queryMode: 'local',
+                        displayField: 'text',
+                        valueField: 'id',
+                        store: {
+                            fields: ['id', 'text'],
+                            data: [
+                                { id: 1, text: '1' },
+                                { id: 101, text: '101' },
+                                { id: 102, text: '102' }
+                            ]
+                        }
+                    }
+                }
+            ],
+            plugins: {
+                cellediting: {
+                    clicksToEdit: 1,
+                    listeners: { edit: 'onVlanEdit' }
+                }
+            }
+        }
+    ]
+});
+
+
+Ext.application({
+    name: 'VlanManager',
+
+    views: [
+        'Main',
+        'SettingsWindow'
+    ],
+
+    launch: function() {
+        Ext.create('VlanManager.view.Main');
+    }
+});
+
+    </script>
+</head>
+<body></body>
+</html>
