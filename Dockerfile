@@ -13,5 +13,5 @@ FROM alpine:latest
 WORKDIR /root/
 # Copy only the binary from the builder stage
 COPY --from=builder /go-mikrotik-vlan-switcher .
-EXPOSE 8080
+EXPOSE 7071
 CMD ["./go-mikrotik-vlan-switcher"]
